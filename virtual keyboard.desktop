@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=virtual keyboard
+Comment=jack application
+Exec=./virtualKeyboard
+Icon=/home/cesar/Bureau/jackApp/clavier/icone.bmp
+Path=/media/cesar/01D344642A3374B0/jackApp
+Terminal=false
+StartupNotify=false
