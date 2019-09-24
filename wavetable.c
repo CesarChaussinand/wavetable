@@ -15,15 +15,12 @@ float env = 0;
 float deltaAtt = 0;
 float deltaRel = 0;
 
+float phaseBase = 0;
 float phase1 = 0;
-float *phase1p = &phase1;
-
 float phase2 = 0;
-float *phase2p = &phase2;
 
 float frequence = 0;
-float frequenceMod = 0;
-float fMod = 1;
+float modAmount = 1;
 
 float detFactor = 0;
 unsigned char note = 0;
@@ -32,16 +29,46 @@ unsigned char note_on = 0;
 float wave[128];
 float wave0[128];
 float wave1[128];
+float wave2[128];
+float wave3[128];
 
-float saw(float freq, float *phaseP){
-	//incrémenter la phase à chaque appel de la fonction
+void init(){
+	FILE* fichier = NULL;
+	char lecture[20];
+	fichier = fopen("wave", "r");
+
+	int i;
+	for (i=0;i<128;i++){
+		fgets(lecture,20,fichier);
+		wave0[i] = strtof(lecture,NULL);
+	}
+
+	for (i=0;i<128;i++){
+		fgets(lecture,20,fichier);
+		wave1[i] = strtof(lecture,NULL);
+	}
+	
+	for (i=0;i<128;i++){
+		fgets(lecture,20,fichier);
+		wave2[i] = strtof(lecture,NULL);
+	}
+	
+	for (i=0;i<128;i++){
+		fgets(lecture,20,fichier);
+		wave3[i] = strtof(lecture,NULL);
+	}
+	
+	fclose(fichier);
+}
+
+float table(float *phaseP){
+	//lit dans la table d'onde
 	float phase = *phaseP;
 	float oscOut=0;
 	int smallPhase = (int)(phase*128);
 	int bigPhase = (smallPhase + 1)%128;
 	float ratio = fmod(phase*128,1);
 	oscOut = wave[smallPhase]*(1.0-ratio) + wave[bigPhase]*(ratio);
-	*phaseP = fmod((phase + freq/44100.0),1.0);
 	return oscOut;
 }
 
@@ -88,9 +115,12 @@ int process(jack_nframes_t nframes, void*arg)
 				}
 			    /* Boucle de traitement sur les échantillons. */
 			if (note_on!=0.0){frequence = midi2freq(note_on);}
-			frequenceMod = frequence * fMod;
-			out1[i] = saw(frequenceMod, &phase1)*env;
-			out2[i] = saw(frequence, &phase2)*env;
+			out1[i] = (table(&phase1)*0.5+table(&phaseBase))*0.1*env;
+			out2[i] = (table(&phase2)*0.5+table(&phaseBase))*0.1*env;
+			
+			phaseBase = fmod((phaseBase + frequence/44100.0),1.0);
+			phase1 = fmod(phase1 + (frequence*(modAmount/(modAmount+1))/44100.0),1.0);
+			phase2 = fmod(phase2 + (frequence*(modAmount/(modAmount+1))/44100.0),1.0);
 			if ((note_on!=0.0) && (env < 1)){env = env + deltaAtt;}
 			if ((note_on==0.0) && (env > 0)){env = env - deltaRel;}
 			if (env < 0){env = 0;}
@@ -107,29 +137,9 @@ Une application audio avec deux ports audio d'entrée et deux ports audio de sor
 
 int main()
 {
-//____________________________________
-FILE* fichier = NULL;
-char lecture[20];
-fichier = fopen("wave0", "r");
 
+init();
 
-int i;
-for (i=0;i<128;i++){
-	fgets(lecture,20,fichier);
-	wave0[i] = strtof(lecture,NULL);
-}
-
-fichier = fopen("wave1", "r");
-
-for (i=0;i<128;i++){
-	fgets(lecture,20,fichier);
-	wave1[i] = strtof(lecture,NULL);
-}
-
-//_____________________________________
-
-fclose(fichier);
-	
 if(SDL_Init(SDL_INIT_VIDEO)==-1)
 	{
 	fprintf(stderr,"erreur a l'initialisation de sdl : %s\n",SDL_GetError());
@@ -148,29 +158,29 @@ SDL_Rect fondPos;
 fondPos.x = 0;
 fondPos.y = 0;
 
-SDL_Surface *det = NULL;
-det = SDL_LoadBMP("slider0.bmp");
-SDL_Rect detPos;
-detPos.x = 20 - det->w / 2;
-detPos.y = ecran->h/2 - det->h/2;
+SDL_Surface *slider1 = NULL;
+slider1 = SDL_LoadBMP("slider0.bmp");
+SDL_Rect slider1Pos;
+slider1Pos.x = 20 - slider1->w / 2;
+slider1Pos.y = ecran->h/2 - slider1->h/2;
 
-SDL_Surface *att = NULL;
-att = SDL_LoadBMP("slider1.bmp");
-SDL_Rect attPos;
-attPos.x = 55 - att->w / 2;
-attPos.y = ecran->h/2 - att->h/2;
+SDL_Surface *slider2 = NULL;
+slider2 = SDL_LoadBMP("slider1.bmp");
+SDL_Rect slider2Pos;
+slider2Pos.x = 55 - slider2->w / 2;
+slider2Pos.y = ecran->h/2 - slider2->h/2;
 
-SDL_Surface *rel = NULL;
-rel = SDL_LoadBMP("slider2.bmp");
-SDL_Rect relPos;
-relPos.x = 90 - rel->w / 2;
-relPos.y = ecran->h/2 - rel->h/2;
+SDL_Surface *slider3 = NULL;
+slider3 = SDL_LoadBMP("slider2.bmp");
+SDL_Rect slider3Pos;
+slider3Pos.x = 90 - slider3->w / 2;
+slider3Pos.y = ecran->h/2 - slider3->h/2;
 
-SDL_Surface *lop = NULL;
-lop = SDL_LoadBMP("slider3.bmp");
-SDL_Rect lopPos;
-lopPos.x = 127 - lop->w / 2;
-lopPos.y = ecran->h/2 - lop->h/2;
+SDL_Surface *slider4 = NULL;
+slider4 = SDL_LoadBMP("slider3.bmp");
+SDL_Rect slider4Pos;
+slider4Pos.x = 127 - slider4->w / 2;
+slider4Pos.y = ecran->h/2 - slider4->h/2;
 
 int continuer = 1;
 SDL_Event event;
@@ -232,57 +242,67 @@ while (continuer)
 		switch(sliderActif)
 		{
 			case 1:
-			detPos.y = event.motion.y - det->h/2;
+			slider1Pos.y = event.motion.y - slider1->h/2;
 			break;
 
 			case 2:
-			attPos.y = event.motion.y - att->h/2;
+			slider2Pos.y = event.motion.y - slider2->h/2;
 			break;
 
 			case 3:
-			relPos.y = event.motion.y - rel->h/2;
+			slider3Pos.y = event.motion.y - slider3->h/2;
 			break;
 
 			case 4:
-			lopPos.y = event.motion.y - lop->h/2;
+			slider4Pos.y = event.motion.y - slider4->h/2;
 			break;
 		}
 		break;
 	}
-	if(detPos.y > maxY){detPos.y = maxY;}
-	if(detPos.y < minY){detPos.y = minY;}
-	if(attPos.y > maxY){attPos.y = maxY;}
-	if(attPos.y < minY){attPos.y = minY;}
-	if(relPos.y > maxY){relPos.y = maxY;}
-	if(relPos.y < minY){relPos.y = minY;}
-	if(lopPos.y > maxY){lopPos.y = maxY;}
-	if(lopPos.y < minY){lopPos.y = minY;}
+	if(slider1Pos.y > maxY){slider1Pos.y = maxY;}
+	if(slider1Pos.y < minY){slider1Pos.y = minY;}
+	if(slider2Pos.y > maxY){slider2Pos.y = maxY;}
+	if(slider2Pos.y < minY){slider2Pos.y = minY;}
+	if(slider3Pos.y > maxY){slider3Pos.y = maxY;}
+	if(slider3Pos.y < minY){slider3Pos.y = minY;}
+	if(slider4Pos.y > maxY){slider4Pos.y = maxY;}
+	if(slider4Pos.y < minY){slider4Pos.y = minY;}
 
 	SDL_FillRect(ecran,NULL,SDL_MapRGB(ecran->format,0,0,0));
 	SDL_BlitSurface(fond,NULL,ecran,&fondPos);
-	SDL_BlitSurface(det,NULL,ecran,&detPos);
-	SDL_BlitSurface(att,NULL,ecran,&attPos);
-	SDL_BlitSurface(rel,NULL,ecran,&relPos);
-	SDL_BlitSurface(lop,NULL,ecran,&lopPos);
+	SDL_BlitSurface(slider1,NULL,ecran,&slider1Pos);
+	SDL_BlitSurface(slider2,NULL,ecran,&slider2Pos);
+	SDL_BlitSurface(slider3,NULL,ecran,&slider3Pos);
+	SDL_BlitSurface(slider4,NULL,ecran,&slider4Pos);
 	
-	detFactor = ((detPos.y-minY) / (maxY-minY));
+	detFactor = (3.99*(slider1Pos.y-minY) / (maxY-minY));
+	int i;
 	for(i=0;i<128;i++){
-	wave[i] = wave0[i]*detFactor + wave1[i]*(1-detFactor);	
+		if (detFactor<1){
+		wave[i] = wave1[i]*fmod(detFactor,1.0) + wave0[i]*(1-fmod(detFactor,1.0));	
+		}else if (detFactor<2){
+		wave[i] = wave2[i]*fmod(detFactor,1.0) + wave1[i]*(1-fmod(detFactor,1.0));	
+		}else if (detFactor<3){
+		wave[i] = wave3[i]*fmod(detFactor,1.0) + wave2[i]*(1-fmod(detFactor,1.0));	
+		}else{
+		wave[i] = wave0[i]*fmod(detFactor,1.0) + wave3[i]*(1-fmod(detFactor,1.0));	
+		}
+	
 	}
 
-	fMod = ((lopPos.y-minY) / (maxY-minY))+1;
+	modAmount = (int)(7*(slider2Pos.y-minY) / (maxY-minY))+1;
 	
-	deltaAtt = 0.001*(attPos.y-minY) / (maxY-minY);
-	deltaRel = 0.001*(relPos.y-minY) / (maxY-minY);
+	deltaAtt = 0.001*(slider3Pos.y-minY) / (maxY-minY);
+	deltaRel = 0.001*(slider4Pos.y-minY) / (maxY-minY);
 	
 	SDL_Flip(ecran);
 }
 
 SDL_FreeSurface(fond);
-SDL_FreeSurface(det);
-SDL_FreeSurface(att);
-SDL_FreeSurface(rel);
-SDL_FreeSurface(lop);
+SDL_FreeSurface(slider1);
+SDL_FreeSurface(slider2);
+SDL_FreeSurface(slider3);
+SDL_FreeSurface(slider4);
 SDL_Quit();
 
     jack_deactivate(client);
