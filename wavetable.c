@@ -10,27 +10,25 @@ jack_port_t* input_port;
 jack_port_t* output_port_left;
 jack_port_t* output_port_right;
 
-float env = 0;
+float env[4] = {0,0,0,0};
 
 float deltaAtt = 0;
 float deltaRel = 0;
 
-float phaseBase = 0;
-float phase1 = 0;
-float phase2 = 0;
+float phase[4] = {0,0,0,0};
 
-float frequence = 0;
-float modAmount = 1;
+float frequence[4] = {0,0,0,0};
 
-float detFactor = 0;
+float wavFactor = 0;
 unsigned char note = 0;
-unsigned char note_on = 0;
+unsigned char note_on[4] = {0,0,0,0};
 
-float wave[128];
-float wave0[128];
-float wave1[128];
-float wave2[128];
-float wave3[128];
+int voiceAct = 0;
+
+float wave0l[128];
+float wave1l[128];
+float wave0r[128];
+float wave1r[128];
 
 void init(){
 	FILE* fichier = NULL;
@@ -40,28 +38,29 @@ void init(){
 	int i;
 	for (i=0;i<128;i++){
 		fgets(lecture,20,fichier);
-		wave0[i] = strtof(lecture,NULL);
+		wave0l[i] = strtof(lecture,NULL);
 	}
 
 	for (i=0;i<128;i++){
 		fgets(lecture,20,fichier);
-		wave1[i] = strtof(lecture,NULL);
+		wave0r[i] = strtof(lecture,NULL);
 	}
-	
+
 	for (i=0;i<128;i++){
 		fgets(lecture,20,fichier);
-		wave2[i] = strtof(lecture,NULL);
+		wave1l[i] = strtof(lecture,NULL);
 	}
-	
+
 	for (i=0;i<128;i++){
 		fgets(lecture,20,fichier);
-		wave3[i] = strtof(lecture,NULL);
+		wave1r[i] = strtof(lecture,NULL);
 	}
-	
+
 	fclose(fichier);
+	
 }
 
-float table(float *phaseP){
+float table(float *phaseP, float *wave){
 	//lit dans la table d'onde
 	float phase = *phaseP;
 	float oscOut=0;
@@ -100,31 +99,56 @@ int process(jack_nframes_t nframes, void*arg)
 						{
 					/* note on */
 						note = *(in_event.buffer + 1);
-						note_on = note;
+							if ((note!=note_on[0])&&(note!=note_on[1])&&(note!=note_on[2])&&(note!=note_on[3])){
+								if(note_on[voiceAct]!=0){voiceAct = (voiceAct+1)%4;}
+								if(note_on[voiceAct]!=0){voiceAct = (voiceAct+1)%4;}
+								if(note_on[voiceAct]!=0){voiceAct = (voiceAct+1)%4;}
+						note_on[voiceAct] = note;
+						voiceAct = (voiceAct+1)%4;
+						int m;
+						for(m=0;m<4;m++){ 
+						printf("voix %i = %d\n",m,note_on[m]);}
+						printf("________________\n");
+							}
 						}
 						
 						else if( ((*(in_event.buffer)) & 0xf0) == 0x80 )
 						{
 					/* note off */
-						if(*(in_event.buffer + 1)==note_on){
-							note = *(in_event.buffer + 1);
-							note_on = 0.0;
+						int j;
+							for(j=0;j<4;j++){
+							if(*(in_event.buffer + 1)==note_on[j]){
+								note = *(in_event.buffer + 1);
+								note_on[j] = 0.0;
+								}
 							}
 						}
 					}
 				}
 			    /* Boucle de traitement sur les échantillons. */
-			if (note_on!=0.0){frequence = midi2freq(note_on);}
-			out1[i] = (table(&phase1)*0.5+table(&phaseBase))*0.1*env;
-			out2[i] = (table(&phase2)*0.5+table(&phaseBase))*0.1*env;
+			out1[i] =	(
+						table(&phase[0], &wave0l[0])*wavFactor*env[0] + table(&phase[0], &wave1l[0])*(1-wavFactor)*env[0] +
+						table(&phase[0]+1, &wave0l[0])*wavFactor*env[1] + table(&phase[0]+1, &wave1l[0])*(1-wavFactor)*env[1] +
+						table(&phase[0]+2, &wave0l[0])*wavFactor*env[2] + table(&phase[0]+2, &wave1l[0])*(1-wavFactor)*env[2] +
+						table(&phase[0]+3, &wave0l[0])*wavFactor*env[3] + table(&phase[0]+3, &wave1l[0])*(1-wavFactor)*env[3]
+						)*0.2;
+						
+			out2[i] =	(
+						table(&phase[0], &wave0r[0])*wavFactor*env[0] + table(&phase[0], &wave1r[0])*(1-wavFactor)*env[0] +
+						table(&phase[0]+1, &wave0r[0])*wavFactor*env[1] + table(&phase[0]+1, &wave1r[0])*(1-wavFactor)*env[1] +
+						table(&phase[0]+2, &wave0r[0])*wavFactor*env[2] + table(&phase[0]+2, &wave1r[0])*(1-wavFactor)*env[2] +
+						table(&phase[0]+3, &wave0r[0])*wavFactor*env[3] + table(&phase[0]+3, &wave1r[0])*(1-wavFactor)*env[3]
+						)*0.2;
 			
-			phaseBase = fmod((phaseBase + frequence/44100.0),1.0);
-			phase1 = fmod(phase1 + (frequence*(modAmount/(modAmount+1))/44100.0),1.0);
-			phase2 = fmod(phase2 + (frequence*(modAmount/(modAmount+1))/44100.0),1.0);
-			if ((note_on!=0.0) && (env < 1)){env = env + deltaAtt;}
-			if ((note_on==0.0) && (env > 0)){env = env - deltaRel;}
-			if (env < 0){env = 0;}
-			if (env > 1){env = 1;}
+			int j;
+			for (j=0;j<4;j++){
+				if (note_on[j]!=0.0){frequence[j] = midi2freq(note_on[j]);}
+				phase[j] = fmod(phase[j] + (frequence[j]/44100.0),1.0);
+				if ((note_on[j]!=0.0) && (env[j] < 1)){env[j] = env[j] + deltaAtt;}
+				if ((note_on[j]==0.0) && (env[j] > 0)){env[j] = env[j] - deltaRel;}
+				if (env[j] < 0){env[j] = 0;}
+				if (env[j] > 1){env[j] = 1;}
+			}
 	}
 
     return 0;      
@@ -149,7 +173,7 @@ if(SDL_Init(SDL_INIT_VIDEO)==-1)
 SDL_Surface *ecran = NULL;
 SDL_WM_SetCaption("wavetable", NULL);
 SDL_WM_SetIcon(SDL_LoadBMP("icone.bmp"),NULL);
-ecran = SDL_SetVideoMode(147,180,32,SDL_HWSURFACE);
+ecran = SDL_SetVideoMode(110,180,32,SDL_HWSURFACE);
 SDL_FillRect(ecran,NULL,SDL_MapRGB(ecran->format,50,50,60));
 
 SDL_Surface *fond = NULL;
@@ -176,11 +200,6 @@ SDL_Rect slider3Pos;
 slider3Pos.x = 90 - slider3->w / 2;
 slider3Pos.y = ecran->h/2 - slider3->h/2;
 
-SDL_Surface *slider4 = NULL;
-slider4 = SDL_LoadBMP("slider3.bmp");
-SDL_Rect slider4Pos;
-slider4Pos.x = 127 - slider4->w / 2;
-slider4Pos.y = ecran->h/2 - slider4->h/2;
 
 int continuer = 1;
 SDL_Event event;
@@ -230,8 +249,7 @@ while (continuer)
 		case SDL_MOUSEBUTTONDOWN:
 		if(event.button.x<38){sliderActif = 1;}
 		else if(event.button.x<73){sliderActif = 2;}
-		else if(event.button.x<109){sliderActif = 3;}
-		else {sliderActif = 4;}
+		else {sliderActif = 3;}
 		break;
 
 		case SDL_MOUSEBUTTONUP:
@@ -252,10 +270,6 @@ while (continuer)
 			case 3:
 			slider3Pos.y = event.motion.y - slider3->h/2;
 			break;
-
-			case 4:
-			slider4Pos.y = event.motion.y - slider4->h/2;
-			break;
 		}
 		break;
 	}
@@ -265,35 +279,17 @@ while (continuer)
 	if(slider2Pos.y < minY){slider2Pos.y = minY;}
 	if(slider3Pos.y > maxY){slider3Pos.y = maxY;}
 	if(slider3Pos.y < minY){slider3Pos.y = minY;}
-	if(slider4Pos.y > maxY){slider4Pos.y = maxY;}
-	if(slider4Pos.y < minY){slider4Pos.y = minY;}
 
 	SDL_FillRect(ecran,NULL,SDL_MapRGB(ecran->format,0,0,0));
 	SDL_BlitSurface(fond,NULL,ecran,&fondPos);
 	SDL_BlitSurface(slider1,NULL,ecran,&slider1Pos);
 	SDL_BlitSurface(slider2,NULL,ecran,&slider2Pos);
 	SDL_BlitSurface(slider3,NULL,ecran,&slider3Pos);
-	SDL_BlitSurface(slider4,NULL,ecran,&slider4Pos);
 	
-	detFactor = (3.99*(slider1Pos.y-minY) / (maxY-minY));
-	int i;
-	for(i=0;i<128;i++){
-		if (detFactor<1){
-		wave[i] = wave1[i]*fmod(detFactor,1.0) + wave0[i]*(1-fmod(detFactor,1.0));	
-		}else if (detFactor<2){
-		wave[i] = wave2[i]*fmod(detFactor,1.0) + wave1[i]*(1-fmod(detFactor,1.0));	
-		}else if (detFactor<3){
-		wave[i] = wave3[i]*fmod(detFactor,1.0) + wave2[i]*(1-fmod(detFactor,1.0));	
-		}else{
-		wave[i] = wave0[i]*fmod(detFactor,1.0) + wave3[i]*(1-fmod(detFactor,1.0));	
-		}
-	
-	}
+	wavFactor = (slider1Pos.y-minY) / (maxY-minY);
 
-	modAmount = (int)(7*(slider2Pos.y-minY) / (maxY-minY))+1;
-	
-	deltaAtt = 0.001*(slider3Pos.y-minY) / (maxY-minY);
-	deltaRel = 0.001*(slider4Pos.y-minY) / (maxY-minY);
+	deltaAtt = 0.001*(slider2Pos.y-minY) / (maxY-minY);
+	deltaRel = 0.001*(slider3Pos.y-minY) / (maxY-minY);
 	
 	SDL_Flip(ecran);
 }
@@ -302,7 +298,6 @@ SDL_FreeSurface(fond);
 SDL_FreeSurface(slider1);
 SDL_FreeSurface(slider2);
 SDL_FreeSurface(slider3);
-SDL_FreeSurface(slider4);
 SDL_Quit();
 
     jack_deactivate(client);
