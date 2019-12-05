@@ -11,7 +11,7 @@ for i in range(128):
 	elif (i<96):
 		tri = tri + str((-i+32)/32.0+1) + "\n"
 	else:
-		tri = tri + str((i-96)/32.0) + "\n"
+		tri = tri + str((i-96)/32.0-1) + "\n"
 
 """	
 saw = ""
@@ -30,11 +30,9 @@ for i in range(128):
 		isaw = isaw + str(-(128-i)/64.0) + "\n"
 """
 
-fichier = open("wave","w")
-fichier.write(sin)
-fichier.write(sin)
-fichier.write(tri)
-fichier.write(tri)
+fichier = open("wave.wt","w")
+for x in range(128):
+	fichier.write(tri)
 fichier.close()
 print "wave ok"
 
